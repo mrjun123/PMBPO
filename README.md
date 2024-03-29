@@ -1,4 +1,4 @@
-# Dropout-based Probabilistic Ensembles with Trajectory Sampling
+# Practical Reinforcement Learning using Time-effieicent Model-based Policy Optimization
 
 Code to reproduce the experiments in Practical Reinforcement Learning using Time-effieicent Model-based Policy Optimization. This paper is currently submitted to IEEE Transactions on Automation Science and Engineering (T-ASE) for peer review.
 
