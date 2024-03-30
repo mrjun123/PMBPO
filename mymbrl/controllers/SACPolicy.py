@@ -174,55 +174,6 @@ class SACPolicy(Controller):
             state_reward = next_obs_reward
             pre_nonterm_mask[nonterm_mask == False] = False
 
-    def mpc_rollout_model(self):
-        predict_length = self.config.agent.predict_length
-        num_particles = self.config.agent.num_particles
-        action_dim = self.dU
-        mpc_rollout_batch_size = self.config.agent.SACPolicy.mpc_rollout_batch_size
-
-        env_state, _, _, _, _ = self.env_pool.sample(int(mpc_rollout_batch_size))
-        for i in range(env_state.shape[0]):
-            states = env_state[i]
-            def states_cost_func(ac_seqs, return_torch = True, sample_epoch = -1, solution = False):
-                if not isinstance(ac_seqs, torch.Tensor):
-                    ac_seqs = torch.tensor(ac_seqs, device=self.config.device).float()
-
-                batch_size = ac_seqs.shape[0]
-                ac_seqs = ac_seqs.reshape(batch_size, predict_length, 1, action_dim)
-                ac_seqs = ac_seqs.transpose(0, 1).contiguous()
-                ac_seqs = ac_seqs.expand(-1, -1, num_particles, -1)
-
-                return self.mpc_cost_fun(ac_seqs, states, return_torch, sample_epoch=sample_epoch, solution=solution)
-            
-            opt_action_next = self.optimizer.obtain_solution(
-                states_cost_func, 
-                self.init_sol
-            )
-            last_cost = states_cost_func(opt_action_next[None], return_torch = False, solution=True).mean().item()
-            print('step', i, 'last_cost', last_cost)
-            mpc_obs = np.array(self.mpc_obs)
-            mpc_acs = np.array(self.mpc_acs)
-            mpc_nonterm_masks = np.array(self.mpc_nonterm_masks)
-            # mpc_nonterm_masks = self.mpc_nonterm_masks
-
-            # prediction_length, particle, dim
-            obs = mpc_obs[:-1, :, :]
-            next_obs = mpc_obs[1:, :, :]
-
-            obs = obs.reshape(-1, obs.shape[-1])
-            next_obs = next_obs.reshape(-1, next_obs.shape[-1])
-            acs = mpc_acs.reshape(-1, mpc_acs.shape[-1])
-            mpc_nonterm_masks = mpc_nonterm_masks.reshape(-1, 1)
-            # acs = mpc_acs
-
-            costs = self.env.obs_cost_fn_cost(next_obs) + self.env.ac_cost_fn_cost(acs)
-            costs = costs[:, None]
-            rewards = -costs
-            terminals = termination_fn(self.config.env, next_obs, acs, rewards)
-            # mpc_nonterm_masks = self.mpc_nonterm_masks
-            
-            self.model_pool.push_batch([(obs[l], acs[l], rewards[l], next_obs[l], terminals[l]) for l in range(obs.shape[0]) if mpc_nonterm_masks[l]])
-
     def save_model(self):
         self.SAC_agent.save_model(self.config.run_dir, epoch=self.exp_epoch)
     
@@ -332,22 +283,9 @@ class PredictEnv:
             obs = obs[None]
             act = act[None]
         with torch.no_grad():
-            if self.config.agent.aleatoric == 'dmbpo':
-                # add_var
-                next_obs, next_obs_reward = self.agent.prediction(obs, act, return_reward_states=True)
-                next_obs = next_obs.cpu().numpy()
-                next_obs_reward = next_obs_reward.cpu().numpy()
-            elif self.config.agent.aleatoric == 'dmbpo_test':
-                if step == rollout_length - 1:
-                    next_obs = self.agent.prediction(obs, act, add_var=True)
-                else:
-                    next_obs = self.agent.prediction(obs, act)
-                next_obs = next_obs.cpu().numpy()
-                next_obs_reward = next_obs
-            else:
-                next_obs = self.agent.prediction(obs, act)
-                next_obs = next_obs.cpu().numpy()
-                next_obs_reward = next_obs
+            next_obs = self.agent.prediction(obs, act)
+            next_obs = next_obs.cpu().numpy()
+            next_obs_reward = next_obs
         
         costs = self.env.obs_cost_fn_cost(next_obs_reward) + self.env.ac_cost_fn_cost(act)
         costs = costs[:, None]
