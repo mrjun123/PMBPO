@@ -51,7 +51,7 @@
         }
     },
     "experiment": {
-        "name": "MBRLSample",
+        "name": "MBRLSampleNew",
         "horizon": 1000,
         "random_horizon": 1000,
         "ntrain_iters": 400,
